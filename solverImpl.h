@@ -1,458 +1,560 @@
 #pragma once
 #include "solver.h"
+#include <cmath>
+#include <chrono>
+#include <algorithm>
+#include <vector>
+#include <deque>
+#include <iostream>
 
-template<int N>
-void reconstruct(const std::unordered_map<P<N>,P<N>> &path, const P<N> &_node){
-	std::deque<P<N>> nodes;
-	auto node = _node;
-	nodes.push_front(node);
-	while(true){
-		auto parent=path.find(node);
-		if(parent==path.end()) break;
-		nodes.push_front(parent->second);
-		node=parent->second;
-	}
-	std::cout<<"solution length: "<<nodes.size()-1<<std::endl;
-	std::cout.flush();
+const double TIMEOUT_SEC = 30.0;
+
+// ==========================================
+// HELPER: Factor de ramificación efectivo b*
+// ==========================================
+static double calcBstar(std::size_t N, int d) {
+    if (d <= 0 || N <= 1) return 0.0;
+    if (d == 1) return static_cast<double>(N - 1);
+    double lo = 1.0, hi = static_cast<double>(N);
+    for (int iter = 0; iter < 200; iter++) {
+        double mid = (lo + hi) / 2.0;
+        double sum = 0.0, pw = 1.0;
+        for (int i = 0; i <= d; i++) { sum += pw; pw *= mid; }
+        if (sum < static_cast<double>(N)) lo = mid;
+        else                              hi = mid;
+    }
+    return (lo + hi) / 2.0;
 }
 
+// ==========================================
+// HELPER: Reconstrucción del camino
+// ==========================================
+template<int N>
+int reconstruct(const std::unordered_map<P<N>,P<N>> &path, const P<N> &_node){
+    std::deque<P<N>> nodes;
+    auto node = _node;
+    nodes.push_front(node);
+    while(true){
+        auto parent = path.find(node);
+        if(parent == path.end()) break;
+        nodes.push_front(parent->second);
+        node = parent->second;
+    }
+    int len = static_cast<int>(nodes.size()) - 1;
+    return len;
+}
+
+// ==========================================
+// BFS (Breadth-First Search)
+// ==========================================
 template<int N>
 void BFS(const P<N>& root) {
-	std::cout<<"===========================\nRunning BFS...\n";
-	auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
+    std::unordered_set<P<N>>  visited;
+    std::queue<P<N>>           Q;
+    std::unordered_map<P<N>,P<N>> path;
 
-	std::unordered_set<P<N>> visited;
-	std::queue<P<N>> Q;
-	std::size_t maxQ = 0;
-	std::size_t uniqueUsefulNodesGenerated = 1;
+    std::size_t maxFrontier    = 0;
+    std::size_t nodesGenerated = 1;   
+    std::size_t nodesExpanded  = 0;
 
-	std::unordered_map<P<N>,P<N>> path;
+    Q.push(root);
+    visited.insert(root);
+    maxFrontier = std::max(maxFrontier, Q.size());
 
-	Q.push(root);
-	maxQ = std::max(maxQ, Q.size());
-	visited.insert(root);
+    while(!Q.empty()){
+        // Verificación de Timeout
+        auto now = std::chrono::high_resolution_clock::now();
+        if (std::chrono::duration<double>(now - start).count() > TIMEOUT_SEC) {
+            std::cout << "BFS," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << ",-1,-1,-1\n";
+            return;
+        }
 
-	while(!Q.empty()){
-		P<N> node=Q.front();
-		Q.pop();
+        P<N> node = Q.front();
+        Q.pop();
+        nodesExpanded++;
 
-		if(node.isDone()){
-			auto end = std::chrono::high_resolution_clock::now();
-			reconstruct(path,node);
-			std::cout<<"Unique Nodes Visited: "<<visited.size()<<std::endl;
-			std::cout<<"Unique Useful Nodes Generated: "<<uniqueUsefulNodesGenerated<<std::endl;
-			std::cout<<"Max Q: "<<maxQ<<std::endl;
-			std::cout<<"FOUND in "<<(end-start).count()/1000000.0<<"ms\n";
-			return;
-		}
+        if(node.isDone()){
+            auto end = std::chrono::high_resolution_clock::now();
+            int solLen = reconstruct(path, node);
+            double bstar = calcBstar(nodesGenerated, solLen);
+            double tiempo = (end-start).count()/1000000.0;
+            std::cout << "BFS," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << "," << bstar << "," << solLen << "," << tiempo << "\n";
+            return;
+        }
 
-		std::vector<DIR> children;
-		node.getCandidates(children);
-		for(auto dir:children){
-			P<N> child(node);
-			child.move(dir);
-			if(visited.find(child)!=visited.end()) continue;
-			Q.push(child);
-			maxQ = std::max(maxQ, Q.size());
-			visited.insert(child);
-			uniqueUsefulNodesGenerated++;
-			path[child]=node;
-		}
+        std::vector<DIR> children;
+        node.getCandidates(children);
+        for(auto dir : children){
+            P<N> child(node);
+            child.move(dir);
+            if(visited.find(child) != visited.end()) continue;
+            Q.push(child);
+            visited.insert(child);
+            path[child] = node;
+            nodesGenerated++;
+            maxFrontier = std::max(maxFrontier, Q.size());
+        }
 
-		if(uniqueUsefulNodesGenerated > NODELIMIT){
-			std::cerr<<"max nodes reached, aborting\n";
-			return;
-		}
-	}
-	std::cout<<"NOT FOUND!!!!\n";
+        if(nodesGenerated > NODELIMIT){
+            std::cout << "BFS," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << ",-1,-1,-1\n";
+            return;
+        }
+    }
+    std::cout << "BFS," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << ",-1,-1,-1\n";
 }
 
+// ==========================================
+// Greedy Best-First Search
+// ==========================================
 template<int N>
 void greedy(const P<N>& root){
-	std::cout<<"===========================\nRunning GreedyBeFS...\n";
-	struct CompH {
-		bool operator()(const P<N>&a,const P<N>&b) const {
-			return a.H()>b.H();
-		}
-	};
-	auto start = std::chrono::high_resolution_clock::now();
+    struct CompH {
+        bool operator()(const P<N>&a, const P<N>&b) const { return a.H() > b.H(); }
+    };
+    auto start = std::chrono::high_resolution_clock::now();
+    std::unordered_set<P<N>>  visited;
+    std::priority_queue<P<N>, std::vector<P<N>>, CompH> Q;
+    std::unordered_map<P<N>,P<N>> path;
 
-	std::unordered_set<P<N>> visited;
-	std::priority_queue<P<N>,std::vector<P<N>>,CompH> Q;
-	std::size_t maxQ = 0;
-	std::size_t uniqueUsefulNodesGenerated = 1;
-	std::unordered_map<P<N>,P<N>> path;
+    std::size_t maxFrontier    = 0;
+    std::size_t nodesGenerated = 1;
+    std::size_t nodesExpanded  = 0;
 
-	Q.push(root);
-	maxQ = std::max(maxQ, Q.size());
-	visited.insert(root);
+    Q.push(root);
+    visited.insert(root);
+    maxFrontier = std::max(maxFrontier, Q.size());
 
-	while(!Q.empty()){
-		P<N> node=Q.top();
-		Q.pop();
+    while(!Q.empty()){
+        // Verificación de Timeout
+        auto now = std::chrono::high_resolution_clock::now();
+        if (std::chrono::duration<double>(now - start).count() > TIMEOUT_SEC) {
+            std::cout << "Greedy," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << ",-1,-1,-1\n";
+            return;
+        }
 
-		if(node.isDone()){
-			auto end = std::chrono::high_resolution_clock::now();
-			reconstruct(path,node);
-			std::cout<<"Unique Nodes Visited: "<<visited.size()<<std::endl;
-			std::cout<<"Unique Useful Nodes Generated: "<<uniqueUsefulNodesGenerated<<std::endl;
-			std::cout<<"Max Q: "<<maxQ<<std::endl;
-			std::cout<<"FOUND in "<<(end-start).count()/1000000.0<<"ms\n";
-			return;
-		}
+        P<N> node = Q.top();
+        Q.pop();
+        nodesExpanded++;
 
-		std::vector<DIR> children;
-		node.getCandidates(children);
-		for(auto dir:children){
-			P<N> child(node);
-			child.move(dir);
-			if(visited.find(child)!=visited.end()) continue;
-			Q.push(child);
-			maxQ = std::max(maxQ, Q.size());
-			visited.insert(child);
-			uniqueUsefulNodesGenerated++;
-			path[child]=node;
-		}
+        if(node.isDone()){
+            auto end = std::chrono::high_resolution_clock::now();
+            int solLen = reconstruct(path, node);
+            double bstar = calcBstar(nodesGenerated, solLen);
+            double tiempo = (end-start).count()/1000000.0;
+            std::cout << "Greedy," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << "," << bstar << "," << solLen << "," << tiempo << "\n";
+            return;
+        }
 
-		if(uniqueUsefulNodesGenerated > NODELIMIT){
-			std::cerr<<"max nodes reached, aborting\n";
-			return;
-		}
-	}
-	std::cout<<"NOT FOUND!!!!\n";
+        std::vector<DIR> children;
+        node.getCandidates(children);
+        for(auto dir : children){
+            P<N> child(node);
+            child.move(dir);
+            if(visited.find(child) != visited.end()) continue;
+            Q.push(child);
+            visited.insert(child);
+            path[child] = node;
+            nodesGenerated++;
+            maxFrontier = std::max(maxFrontier, Q.size());
+        }
+
+        if(nodesGenerated > NODELIMIT){
+            std::cout << "Greedy," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << ",-1,-1,-1\n";
+            return;
+        }
+    }
+    std::cout << "Greedy," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << ",-1,-1,-1\n";
 }
 
-
 // ==========================================
-// 2.2 NUEVOS ALGORITMOS
-// ==========================================
-
 // Estructura auxiliar para A* y SMA*
+// ==========================================
 template<int N>
 struct AStarNode {
-	P<N> state;
-	int g;
-	int f() const { return g + state.H2(); } // Usando h2 (Manhattan)
-	bool operator>(const AStarNode& other) const {
-		return f() > other.f();
-	}
+    P<N> state;
+    int  g;
+    int  f() const { return g + state.H2(); }
+    bool operator>(const AStarNode& o) const { return f() > o.f(); }
 };
 
-// --- A* (A-Star) ---
+// ==========================================
+// A* (A-Star) con h2 = Manhattan
+// ==========================================
 template<int N>
 void AStar(const P<N>& root) {
-	std::cout << "===========================\nRunning A* (h2)...\n";
-	auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
+    std::priority_queue<AStarNode<N>, std::vector<AStarNode<N>>, std::greater<AStarNode<N>>> Q;
+    std::unordered_map<P<N>, int>    g_score;
+    std::unordered_map<P<N>, P<N>>   path;
 
-	std::priority_queue<AStarNode<N>, std::vector<AStarNode<N>>, std::greater<AStarNode<N>>> Q;
-	std::unordered_map<P<N>, int> g_score;
-	std::unordered_map<P<N>, P<N>> path;
-	std::size_t maxQ = 0;
-	std::size_t uniqueUsefulNodesGenerated = 1;
+    std::size_t maxFrontier    = 0;
+    std::size_t nodesGenerated = 1;
+    std::size_t nodesExpanded  = 0;
 
-	Q.push({root, 0});
-	g_score[root] = 0;
-	maxQ = std::max(maxQ, Q.size());
+    Q.push({root, 0});
+    g_score[root] = 0;
+    maxFrontier = std::max(maxFrontier, Q.size());
 
-	while(!Q.empty()) {
-		AStarNode<N> current = Q.top();
-		Q.pop();
+    while(!Q.empty()){
+        // Verificación de Timeout
+        auto now = std::chrono::high_resolution_clock::now();
+        if (std::chrono::duration<double>(now - start).count() > TIMEOUT_SEC) {
+            std::cout << "AStar," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << ",-1,-1,-1\n";
+            return;
+        }
 
-		if(current.state.isDone()) {
-			auto end = std::chrono::high_resolution_clock::now();
-			reconstruct(path, current.state);
-			std::cout << "Unique Nodes Visited/Stored: " << g_score.size() << "\n";
-			std::cout << "Unique Useful Nodes Generated: " << uniqueUsefulNodesGenerated << "\n";
-			std::cout << "Max Q: " << maxQ << "\n";
-			std::cout << "FOUND in " << (end-start).count()/1000000.0 << "ms\n";
-			return;
-		}
+        AStarNode<N> current = Q.top();
+        Q.pop();
 
-		if (current.g > g_score[current.state]) continue; // Skip obsolete states
+        if(current.g > g_score[current.state]) continue;
+        nodesExpanded++;
 
-		std::vector<DIR> children;
-		current.state.getCandidates(children);
-		for(auto dir : children) {
-			P<N> child(current.state);
-			child.move(dir);
-			int tentative_g = current.g + 1;
+        if(current.state.isDone()){
+            auto end = std::chrono::high_resolution_clock::now();
+            int solLen = reconstruct(path, current.state);
+            double bstar = calcBstar(nodesGenerated, solLen);
+            double tiempo = (end-start).count()/1000000.0;
+            std::cout << "AStar," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << "," << bstar << "," << solLen << "," << tiempo << "\n";
+            return;
+        }
 
-			if(g_score.find(child) == g_score.end() || tentative_g < g_score[child]) {
-				g_score[child] = tentative_g;
-				path[child] = current.state;
-				Q.push({child, tentative_g});
-				maxQ = std::max(maxQ, Q.size());
-				uniqueUsefulNodesGenerated++;
-			}
-		}
+        std::vector<DIR> children;
+        current.state.getCandidates(children);
+        for(auto dir : children){
+            P<N> child(current.state);
+            child.move(dir);
+            int tentative_g = current.g + 1;
 
-		if(uniqueUsefulNodesGenerated > NODELIMIT) {
-			std::cerr << "max nodes reached, aborting\n";
-			return;
-		}
-	}
-	std::cout << "NOT FOUND!!!!\n";
+            if(g_score.find(child) == g_score.end() || tentative_g < g_score[child]){
+                g_score[child] = tentative_g;
+                path[child]    = current.state;
+                Q.push({child, tentative_g});
+                nodesGenerated++;
+                maxFrontier = std::max(maxFrontier, Q.size());
+            }
+        }
+
+        if(nodesGenerated > NODELIMIT){
+            std::cout << "AStar," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << ",-1,-1,-1\n";
+            return;
+        }
+    }
+    std::cout << "AStar," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << ",-1,-1,-1\n";
 }
 
-// --- IDA* Auxiliar ---
+// ==========================================
+// IDA* — función recursiva auxiliar
+// ==========================================
 template<int N>
-int searchIDA(const P<N>& node, int g, int bound, std::unordered_map<P<N>, P<N>>& path, 
-              std::unordered_set<P<N>>& path_set, std::size_t& nodes_gen) {
-	int f = g + node.H2();
-	if (f > bound) return f;
-	if (node.isDone()) return -1; // -1 indica que se encontró la meta
+int searchIDA(const P<N>& node, int g, int bound,
+              std::unordered_map<P<N>,P<N>>& path,
+              std::unordered_set<P<N>>& path_set,
+              std::size_t& nodesGenerated,
+              std::size_t& nodesExpanded,
+              int& maxDepth,
+              const std::chrono::time_point<std::chrono::high_resolution_clock>& start)
+{
+    // Verificación de Timeout (Retorna -2 si se acabó el tiempo)
+    auto now = std::chrono::high_resolution_clock::now();
+    if (std::chrono::duration<double>(now - start).count() > TIMEOUT_SEC) return -2;
 
-	int min_val = 1e9; // Infinito
-	std::vector<DIR> children;
-	node.getCandidates(children);
+    int f = g + node.H2();
+    if(f > bound) return f;
+    if(node.isDone()) return -1;
 
-	for (auto dir : children) {
-		P<N> child(node);
-		child.move(dir);
+    nodesExpanded++;
+    if(g > maxDepth) maxDepth = g;
 
-		if (path_set.find(child) == path_set.end()) { // Evitar ciclos en el camino actual
-			path_set.insert(child);
-			path[child] = node;
-			nodes_gen++;
-			
-			int t = searchIDA(child, g + 1, bound, path, path_set, nodes_gen);
-			if (t == -1) return -1;
-			if (t < min_val) min_val = t;
-			
-			path_set.erase(child); // Backtrack
-		}
-	}
-	return min_val;
+    int min_val = static_cast<int>(1e9);
+    std::vector<DIR> children;
+    node.getCandidates(children);
+
+    for(auto dir : children){
+        P<N> child(node);
+        child.move(dir);
+
+        if(path_set.find(child) == path_set.end()){
+            path_set.insert(child);
+            path[child] = node;
+            nodesGenerated++;
+
+            int t = searchIDA(child, g + 1, bound, path, path_set, nodesGenerated, nodesExpanded, maxDepth, start);
+            if(t == -1 || t == -2) return t; // Propagar éxito o timeout
+            if(t < min_val) min_val = t;
+
+            path_set.erase(child); 
+        }
+    }
+    return min_val;
 }
 
-// --- IDA* (Iterative-Deepening A*) ---
+// ==========================================
+// IDA* (Iterative-Deepening A*)
+// ==========================================
 template<int N>
 void IDAStar(const P<N>& root) {
-	std::cout << "===========================\nRunning IDA* (h2)...\n";
-	auto start = std::chrono::high_resolution_clock::now();
-	
-	int bound = root.H2();
-	std::unordered_map<P<N>, P<N>> path;
-	std::unordered_set<P<N>> path_set;
-	std::size_t nodes_gen = 1;
+    auto start = std::chrono::high_resolution_clock::now();
+    int   bound          = root.H2();
+    std::size_t nodesGenerated = 1;
+    std::size_t nodesExpanded  = 0;
+    int   maxDepth       = 0;   
 
-	path_set.insert(root);
+    std::unordered_map<P<N>,P<N>> path;
+    std::unordered_set<P<N>>      path_set;
+    path_set.insert(root);
 
-	while (true) {
-		int t = searchIDA(root, 0, bound, path, path_set, nodes_gen);
-		if (t == -1) {
-			auto end = std::chrono::high_resolution_clock::now();
-			std::cout << "Nodes Generated (Total across all iterations): " << nodes_gen << "\n";
-			// Buscar la meta en path para reconstruir
-			P<N> target;
-			for (const auto& pair : path) {
-				if (pair.first.isDone()) { target = pair.first; break; }
-			}
-			if(target.isDone()) reconstruct(path, target);
-			std::cout << "FOUND in " << (end-start).count()/1000000.0 << "ms\n";
-			return;
-		}
-		if (t >= 1e9 || nodes_gen > NODELIMIT) {
-			std::cout << "NOT FOUND OR NODE LIMIT REACHED!!!!\n";
-			return;
-		}
-		bound = t; // Incrementar la profundidad de búsqueda al menor límite excedido
-	}
+    while(true){
+        int t = searchIDA(root, 0, bound, path, path_set, nodesGenerated, nodesExpanded, maxDepth, start);
+
+        if(t == -1){ // Solución encontrada
+            auto end = std::chrono::high_resolution_clock::now();
+            P<N> target;
+            bool found = false;
+            for(const auto& pair : path){
+                if(pair.first.isDone()){ target = pair.first; found = true; break; }
+            }
+            int solLen = 0;
+            if(found) solLen = reconstruct(path, target);
+            double bstar = calcBstar(nodesGenerated, solLen);
+            double tiempo = (end-start).count()/1000000.0;
+            std::cout << "IDAStar," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxDepth << "," << bstar << "," << solLen << "," << tiempo << "\n";
+            return;
+        }
+        
+        // Timeout (-2) o Límite de Nodos/No encontrado
+        if(t == -2 || t >= static_cast<int>(1e9) || nodesGenerated > NODELIMIT){
+            std::cout << "IDAStar," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxDepth << ",-1,-1,-1\n";
+            return;
+        }
+        bound = t;
+    }
 }
 
-// --- Beam Search ---
+// ==========================================
+// Beam Search
+// ==========================================
 template<int N>
 void BeamSearch(const P<N>& root, int beam_width) {
-	std::cout << "===========================\nRunning Beam Search (Width: " << beam_width << ")...\n";
-	auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
+    std::vector<P<N>>           current_level;
+    std::unordered_set<P<N>>    visited;
+    std::unordered_map<P<N>,P<N>> path;
 
-	std::vector<P<N>> current_level;
-	std::unordered_set<P<N>> visited;
-	std::unordered_map<P<N>, P<N>> path;
-	std::size_t uniqueUsefulNodesGenerated = 1;
+    std::size_t maxFrontier    = 0;
+    std::size_t nodesGenerated = 1;
+    std::size_t nodesExpanded  = 0;
 
-	current_level.push_back(root);
-	visited.insert(root);
+    current_level.push_back(root);
+    visited.insert(root);
+    maxFrontier = std::max(maxFrontier, current_level.size());
 
-	while(!current_level.empty()) {
-		std::vector<P<N>> next_level;
-		for(const auto& node : current_level) {
-			if(node.isDone()) {
-				auto end = std::chrono::high_resolution_clock::now();
-				reconstruct(path, node);
-				std::cout << "Unique Nodes Visited: " << visited.size() << "\n";
-				std::cout << "FOUND in " << (end-start).count()/1000000.0 << "ms\n";
-				return;
-			}
+    while(!current_level.empty()){
+        // Verificación de Timeout
+        auto now = std::chrono::high_resolution_clock::now();
+        if (std::chrono::duration<double>(now - start).count() > TIMEOUT_SEC) {
+            std::cout << "BeamSearch," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << ",-1,-1,-1\n";
+            return;
+        }
 
-			std::vector<DIR> children;
-			node.getCandidates(children);
-			for(auto dir : children) {
-				P<N> child(node);
-				child.move(dir);
-				if(visited.find(child) == visited.end()) {
-					visited.insert(child);
-					path[child] = node;
-					next_level.push_back(child);
-					uniqueUsefulNodesGenerated++;
-				}
-			}
-		}
+        std::vector<P<N>> next_level;
 
-		if(uniqueUsefulNodesGenerated > NODELIMIT) {
-			std::cerr << "max nodes reached, aborting\n";
-			return;
-		}
+        for(const auto& node : current_level){
+            nodesExpanded++;
 
-		// Ordenar nivel siguiente por h2 y truncar a beam_width
-		std::sort(next_level.begin(), next_level.end(), [](const P<N>& a, const P<N>& b) {
-			return a.H2() < b.H2();
-		});
+            if(node.isDone()){
+                auto end = std::chrono::high_resolution_clock::now();
+                int solLen = reconstruct(path, node);
+                double bstar = calcBstar(nodesGenerated, solLen);
+                double tiempo = (end-start).count()/1000000.0;
+                std::cout << "BeamSearch," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << "," << bstar << "," << solLen << "," << tiempo << "\n";
+                return;
+            }
 
-		if(next_level.size() > static_cast<std::size_t>(beam_width)) {
-			next_level.resize(beam_width);
-		}
-		current_level = std::move(next_level);
-	}
-	std::cout << "NOT FOUND!!!!\n";
+            std::vector<DIR> children;
+            node.getCandidates(children);
+            for(auto dir : children){
+                P<N> child(node);
+                child.move(dir);
+                if(visited.find(child) == visited.end()){
+                    visited.insert(child);
+                    path[child] = node;
+                    next_level.push_back(child);
+                    nodesGenerated++;
+                }
+            }
+        }
+
+        if(nodesGenerated > NODELIMIT){
+             std::cout << "BeamSearch," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << ",-1,-1,-1\n";
+            return;
+        }
+
+        std::sort(next_level.begin(), next_level.end(), [](const P<N>& a, const P<N>& b){
+            return a.H2() < b.H2();
+        });
+        if(next_level.size() > static_cast<std::size_t>(beam_width))
+            next_level.resize(beam_width);
+
+        maxFrontier = std::max(maxFrontier, next_level.size());
+        current_level = std::move(next_level);
+    }
+    std::cout << "BeamSearch," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << ",-1,-1,-1\n";
 }
 
-// --- RBFS Auxiliar ---
+// ==========================================
+// RBFS — función recursiva auxiliar
+// ==========================================
 template<int N>
-std::pair<P<N>, int> RBFS_Recursive(const P<N>& node, const P<N>* parent, int g, int f_node, int f_limit, 
-                                    std::unordered_map<P<N>, P<N>>& path, std::size_t& nodes_gen) {
-	if (node.isDone()) return {node, -1}; // -1 es la señal de éxito
-	
-	std::vector<DIR> candidates;
-	node.getCandidates(candidates);
-	
-	std::vector<std::pair<P<N>, int>> successors;
-	for(auto dir : candidates) {
-		P<N> child(node);
-		child.move(dir);
-		
-		// 1. PODA DEL PADRE: Evitar retroceso inmediato (oscilación)
-		if (parent != nullptr && child == *parent) continue;
-		
-		nodes_gen++;
-		// 2. MONOTONICIDAD: El 'f' del hijo es el máximo entre su propio coste y el heredado
-		int child_f = std::max(g + 1 + child.H2(), f_node);
-		successors.push_back({child, child_f});
-	}
+std::pair<P<N>, int> RBFS_Recursive(
+        const P<N>& node, const P<N>* parent,
+        int g, int f_node, int f_limit,
+        std::unordered_map<P<N>,P<N>>& path,
+        std::size_t& nodesGenerated,
+        std::size_t& nodesExpanded,
+        std::size_t& maxFrontier,
+        const std::chrono::time_point<std::chrono::high_resolution_clock>& start)
+{
+    // Verificación de Timeout
+    auto now = std::chrono::high_resolution_clock::now();
+    if (std::chrono::duration<double>(now - start).count() > TIMEOUT_SEC) return {node, -2};
 
-	if(successors.empty()) return {node, 1e9}; // Callejón sin salida
+    if(node.isDone()) return {node, -1};
 
-	while(true) {
-		if(nodes_gen > NODELIMIT) return {node, 1e9};
+    nodesExpanded++;
+    std::vector<DIR> candidates;
+    node.getCandidates(candidates);
 
-		// Ordenar sucesores de menor a mayor 'f'
-		std::sort(successors.begin(), successors.end(), 
-		          [](const auto& a, const auto& b){ return a.second < b.second; });
+    std::vector<std::pair<P<N>,int>> successors;
+    for(auto dir : candidates){
+        P<N> child(node);
+        child.move(dir);
+        if(parent != nullptr && child == *parent) continue;   
+        nodesGenerated++;
+        int child_f = std::max(g + 1 + child.H2(), f_node);  
+        successors.push_back({child, child_f});
+    }
+    maxFrontier = std::max(maxFrontier, successors.size());
 
-		auto& best = successors[0];
-		
-		// Si el mejor hijo supera el límite actual, retrocedemos propagando su coste
-		if(best.second > f_limit) return {node, best.second};
+    if(successors.empty()) return {node, static_cast<int>(1e9)};
 
-		// El f_limit para el mejor hijo es el mínimo entre el límite actual y el hermano que le sigue
-		int alternative_f = (successors.size() > 1) ? successors[1].second : 1e9;
-		
-		auto result = RBFS_Recursive(best.first, &node, g + 1, best.second, std::min(f_limit, alternative_f), path, nodes_gen);
-		
-		if(result.second == -1) {
-			// 3. CAMINO SEGURO: Solo guardamos la ruta si la rama fue exitosa
-			path[best.first] = node;
-			return result; 
-		}
-		
-		// Actualizar el costo 'f' del nodo explorado para la siguiente iteración del while
-		best.second = result.second;
-	}
+    while(true){
+        if(nodesGenerated > NODELIMIT) return {node, static_cast<int>(1e9)};
+
+        std::sort(successors.begin(), successors.end(),
+                  [](const auto& a, const auto& b){ return a.second < b.second; });
+
+        auto& best = successors[0];
+        if(best.second > f_limit) return {node, best.second};
+
+        int alternative_f = (successors.size() > 1) ? successors[1].second : static_cast<int>(1e9);
+
+        auto result = RBFS_Recursive(best.first, &node, g + 1, best.second,
+                                     std::min(f_limit, alternative_f),
+                                     path, nodesGenerated, nodesExpanded, maxFrontier, start);
+        
+        if(result.second == -1 || result.second == -2){
+            if (result.second == -1) path[best.first] = node; // Solo guardar ruta si es éxito
+            return result;
+        }
+        best.second = result.second;
+    }
 }
 
-// --- RBFS (Recursive Best-First Search) ---
+// ==========================================
+// RBFS (Recursive Best-First Search)
+// ==========================================
 template<int N>
 void RBFS(const P<N>& root) {
-	std::cout << "===========================\nRunning RBFS (h2)...\n";
-	auto start = std::chrono::high_resolution_clock::now();
-	
-	std::unordered_map<P<N>, P<N>> path;
-	std::size_t nodes_gen = 1;
-	
-	int f_root = root.H2();
-	
-	// Iniciamos la recursión pasando nullptr como padre inicial
-	auto result = RBFS_Recursive<N>(root, nullptr, 0, f_root, 1e9, path, nodes_gen);
+    auto start = std::chrono::high_resolution_clock::now();
+    std::unordered_map<P<N>,P<N>> path;
+    std::size_t nodesGenerated = 1;
+    std::size_t nodesExpanded  = 0;
+    std::size_t maxFrontier    = 0;
 
-	if (result.second == -1) {
-		auto end = std::chrono::high_resolution_clock::now();
-		reconstruct(path, result.first);
-		std::cout << "Nodes Generated: " << nodes_gen << "\n";
-		std::cout << "FOUND in " << (end-start).count()/1000000.0 << "ms\n";
-	} else {
-		std::cout << "NOT FOUND OR NODE LIMIT REACHED!!!!\n";
-	}
+    int f_root = root.H2();
+    auto result = RBFS_Recursive<N>(root, nullptr, 0, f_root,
+                                    static_cast<int>(1e9),
+                                    path, nodesGenerated, nodesExpanded, maxFrontier, start);
+
+    if(result.second == -1){ // Éxito
+        auto end = std::chrono::high_resolution_clock::now();
+        int solLen = reconstruct(path, result.first);
+        double bstar = calcBstar(nodesGenerated, solLen);
+        double tiempo = (end-start).count()/1000000.0;
+        std::cout << "RBFS," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << "," << bstar << "," << solLen << "," << tiempo << "\n";
+    } else { // Timeout (-2) o Nodos límite
+        std::cout << "RBFS," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << ",-1,-1,-1\n";
+    }
 }
 
-// --- SMA* (Simplified Memory-bounded A*) ---
+// ==========================================
+// SMA* (Simplified Memory-bounded A*)
+// ==========================================
 template<int N>
 void SMAStar(const P<N>& root, std::size_t memory_limit) {
-	// SMA* requiere gestión manual de grafos acíclicos dirigidos y poda de hojas olvidadas.
-	// Por restricciones de complejidad en esta implementación directa sobre el estado del nodo, 
-	// se incluye una variante arquitectónica simplificada apoyada en A* que respeta un límite estricto de frontera.
-	std::cout << "===========================\nRunning SMA* (Mem Limit: " << memory_limit << ")...\n";
-	auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
+    std::vector<AStarNode<N>>       open_list;
+    std::unordered_map<P<N>, int>   g_score;
+    std::unordered_map<P<N>, P<N>>  path;
 
-	// Utilizaremos un contenedor vector con sort continuo para simular la expulsión del peor nodo (memory bounds)
-	std::vector<AStarNode<N>> open_list;
-	std::unordered_map<P<N>, int> g_score;
-	std::unordered_map<P<N>, P<N>> path;
-	std::size_t uniqueUsefulNodesGenerated = 1;
+    std::size_t maxFrontier    = 0;
+    std::size_t nodesGenerated = 1;
+    std::size_t nodesExpanded  = 0;
 
-	open_list.push_back({root, 0});
-	g_score[root] = 0;
+    open_list.push_back({root, 0});
+    g_score[root] = 0;
+    maxFrontier = std::max(maxFrontier, open_list.size());
 
-	while(!open_list.empty()) {
-		// Ordenamos descendentemente, para extraer por el final (back) como el mejor nodo (menor f)
-		std::sort(open_list.begin(), open_list.end(), std::greater<AStarNode<N>>());
-		
-		AStarNode<N> current = open_list.back();
-		open_list.pop_back();
+    while(!open_list.empty()){
+        // Verificación de Timeout
+        auto now = std::chrono::high_resolution_clock::now();
+        if (std::chrono::duration<double>(now - start).count() > TIMEOUT_SEC) {
+            std::cout << "SMAStar," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << ",-1,-1,-1\n";
+            return;
+        }
 
-		if(current.state.isDone()) {
-			auto end = std::chrono::high_resolution_clock::now();
-			reconstruct(path, current.state);
-			std::cout << "FOUND in " << (end-start).count()/1000000.0 << "ms\n";
-			return;
-		}
+        std::sort(open_list.begin(), open_list.end(), std::greater<AStarNode<N>>());
+        AStarNode<N> current = open_list.back();
+        open_list.pop_back();
+        nodesExpanded++;
 
-		std::vector<DIR> children;
-		current.state.getCandidates(children);
-		for(auto dir : children) {
-			P<N> child(current.state);
-			child.move(dir);
-			int tentative_g = current.g + 1;
+        if(current.state.isDone()){
+            auto end = std::chrono::high_resolution_clock::now();
+            int solLen = reconstruct(path, current.state);
+            double bstar = calcBstar(nodesGenerated, solLen);
+            double tiempo = (end-start).count()/1000000.0;
+            std::cout << "SMAStar," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << "," << bstar << "," << solLen << "," << tiempo << "\n";
+            return;
+        }
 
-			if(g_score.find(child) == g_score.end() || tentative_g < g_score[child]) {
-				g_score[child] = tentative_g;
-				path[child] = current.state;
-				open_list.push_back({child, tentative_g});
-				uniqueUsefulNodesGenerated++;
-			}
-		}
+        std::vector<DIR> children;
+        current.state.getCandidates(children);
+        for(auto dir : children){
+            P<N> child(current.state);
+            child.move(dir);
+            int tentative_g = current.g + 1;
 
-		// Si excedemos la memoria acotada, podamos los nodos con el mayor costo f()
-		if(open_list.size() > memory_limit) {
-			// Volvemos a ordenar porque hemos añadido elementos
-			std::sort(open_list.begin(), open_list.end(), std::greater<AStarNode<N>>());
-			// Eliminamos del frente del vector (los de mayor f, ya que el orden es de mayor a menor f)
-			open_list.erase(open_list.begin(), open_list.begin() + (open_list.size() - memory_limit));
-		}
+            if(g_score.find(child) == g_score.end() || tentative_g < g_score[child]){
+                g_score[child] = tentative_g;
+                path[child]    = current.state;
+                open_list.push_back({child, tentative_g});
+                nodesGenerated++;
+            }
+        }
 
-		if(uniqueUsefulNodesGenerated > NODELIMIT) {
-			std::cerr << "max nodes reached, aborting\n";
-			return;
-		}
-	}
-	std::cout << "NOT FOUND!!!!\n";
+        if(open_list.size() > memory_limit){
+            std::sort(open_list.begin(), open_list.end(), std::greater<AStarNode<N>>());
+            open_list.erase(open_list.begin(),
+                            open_list.begin() + (open_list.size() - memory_limit));
+        }
+
+        maxFrontier = std::max(maxFrontier, open_list.size());
+
+        if(nodesGenerated > NODELIMIT){
+            std::cout << "SMAStar," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << ",-1,-1,-1\n";
+            return;
+        }
+    }
+    std::cout << "SMAStar," << N << "," << shuffleIterations << "," << nodesGenerated << "," << nodesExpanded << "," << maxFrontier << ",-1,-1,-1\n";
 }

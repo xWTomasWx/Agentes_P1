@@ -1,14 +1,3 @@
-/*#pragma once
-#include "puzzle.h"
-#include <cstddef>
-
-extern std::size_t NODELIMIT;
-
-template<int N> void BFS(const P<N>& root);
-template<int N> void greedy(const P<N>& root);
-template<int N> void reconstruct(const std::unordered_map<P<N>,P<N>> &path, const P<N> &node);
-*/
-
 #pragma once
 #include "puzzle.h"
 #include <cstddef>
@@ -16,11 +5,9 @@ template<int N> void reconstruct(const std::unordered_map<P<N>,P<N>> &path, cons
 
 extern std::size_t NODELIMIT;
 
+template<int N> int  reconstruct(const std::unordered_map<P<N>,P<N>> &path, const P<N> &node);
 template<int N> void BFS(const P<N>& root);
 template<int N> void greedy(const P<N>& root);
-template<int N> void reconstruct(const std::unordered_map<P<N>,P<N>> &path, const P<N> &node);
-
-// Nuevos algoritmos
 template<int N> void AStar(const P<N>& root);
 template<int N> void IDAStar(const P<N>& root);
 template<int N> void BeamSearch(const P<N>& root, int beam_width = 100);

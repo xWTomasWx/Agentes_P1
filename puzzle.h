@@ -15,33 +15,12 @@
 enum DIR{up,right,down,left};
 extern int shuffleIterations;
 
-/*template<int N> class P{
-protected:
-	std::array<int,N> brd;
-	int x, y, sqrtN;
-	int h;
-
-public:
-	P();
-	void move( DIR d );
-	void getCandidates( std::vector<DIR>& v ) const;
-	void drawBrd() const;
-	void getTiles( std::vector<int>& p, std::vector<DIR>& v ) const;
-	bool isDone() const;
-
-	bool operator==(const P<N>& rhs) const{return brd==rhs.brd;}
-	friend std::size_t std::hash<P<N>>::operator()( const P<N> & board) const noexcept;
-
-	int H()const{return h;};
-	int calcH()const;
-};*/
-
 template<int N> class P{
 protected:
 	std::array<int,N> brd;
 	int x, y, sqrtN;
 	int h;
-	int h_manhattan; // Nueva variable para la distancia Manhattan
+	int h_manhattan; 
 
 public:
 	P();
@@ -57,7 +36,6 @@ public:
 	int H()const{return h;}
 	int calcH()const;
 
-	// Declaraciones para la nueva heurística
 	int H2()const{return h_manhattan;}
 	int calcManhattan()const;
 };

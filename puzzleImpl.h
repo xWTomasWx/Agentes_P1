@@ -1,21 +1,6 @@
 #pragma once
 #include "puzzle.h"
 
-/*template<int N>
-P<N>::P(): x(std::sqrt(N)-1),y(std::sqrt(N)-1),sqrtN(std::sqrt(N)){
-	int i = 1;
-	std::vector<DIR> v;
-	for( ; i < N; i++ ) {
-		brd[i - 1] = i;
-	}
-	brd[N-1] = 0;
-	for( i = 0; i < shuffleIterations; i++ ) {
-		getCandidates( v );
-		move( v[rand() % v.size()] );
-		v.clear();
-	}
-	h=calcH();
-}*/
 
 template<int N>
 int P<N>::calcH()const{
@@ -26,19 +11,6 @@ int P<N>::calcH()const{
 	return count;
 }
 
-/*template<int N>
-void P<N>::move( DIR d ) {
-	int t = x + y * sqrtN;
-	switch( d ) {
-		case up: y--; break;
-		case right: x++; break;
-		case down: y++; break;
-		case left: x--;
-	}
-	brd[t] = brd[x + y * sqrtN];
-	brd[x + y * sqrtN] = 0;
-	h=calcH();
-}*/
 
 template<int N>
 void P<N>::getCandidates( std::vector<DIR>& v ) const{
@@ -107,13 +79,12 @@ namespace std
 }
 
 
-// --- Añadir al final del archivo ---
 template<int N>
 int P<N>::calcManhattan() const{
 	int dist = 0;
 	for(int i = 0; i < N; i++) {
 		int val = brd[i];
-		if(val != 0) { // El espacio en blanco (0) no se cuenta en la distancia Manhattan
+		if(val != 0) { 
 			int targetX = (val - 1) % sqrtN;
 			int targetY = (val - 1) / sqrtN;
 			int currentX = i % sqrtN;
@@ -124,7 +95,7 @@ int P<N>::calcManhattan() const{
 	return dist;
 }
 
-// --- Modificar el constructor P() ---
+
 template<int N>
 P<N>::P(): x(std::sqrt(N)-1),y(std::sqrt(N)-1),sqrtN(std::sqrt(N)){
 	int i = 1;
@@ -139,10 +110,9 @@ P<N>::P(): x(std::sqrt(N)-1),y(std::sqrt(N)-1),sqrtN(std::sqrt(N)){
 		v.clear();
 	}
 	h = calcH();
-	h_manhattan = calcManhattan(); // Inicializar
+	h_manhattan = calcManhattan(); 
 }
 
-// --- Modificar P<N>::move ---
 template<int N>
 void P<N>::move( DIR d ) {
 	int t = x + y * sqrtN;
@@ -155,5 +125,5 @@ void P<N>::move( DIR d ) {
 	brd[t] = brd[x + y * sqrtN];
 	brd[x + y * sqrtN] = 0;
 	h = calcH();
-	h_manhattan = calcManhattan(); // Actualizar en cada movimiento
+	h_manhattan = calcManhattan(); 
 }
